@@ -31,7 +31,7 @@ export interface IRefreshDelete {
 export const serializeOptions:SerializeOptions = {
   httpOnly:true,
   secure:true,
-  sameSite:'strict',
+  sameSite:'lax',
   maxAge:60*60*24*30,
   path:'/',
   ...(process.env.NODE_ENV === 'production' && { domain:process.env.COOKIE_DOMAIN})
