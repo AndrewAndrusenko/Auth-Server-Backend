@@ -21,9 +21,9 @@ router.post('/delToken',verifyAccess, (req, res) => {
   .subscribe(data=>res.send(data))
 })
 /* Get all user data. */
-router.get('/all', verifyAccess,async function(req, res, next) {
-  findAllUserData(req, res, next)
+router.get('/all', verifyAccess,async function(req, res) {
+  findAllUserData(req, res)
 });
-router.post('/user-del',verifyAccess, (req, res, next) => {
-  deleteUser(req,res,next)
+router.post('/user-del',verifyAccess, (req, res) => {
+  deleteUser(req,res)
 })

@@ -51,3 +51,13 @@ Loggings events & admin user list/delete
 1. Created route getUserData to retrieve jwt payload based on httponly cookie. It is necessary for apps authenticated via the server
 2. Function verifyJWT has been updated to pass down jwt payload via user property of request object  
 3. Route module quote has been removed as a legacy
+
+17/09/26
+refactor(server): architecture optimization for reactive singletons db and secure token lifecycles
+
+- Rewrite `mongoDBClient` to use native driver heartbeat auto-reconnect logic, removing legacy connection-pooling wrappers.
+- Refactore the main bootstrap process to prepare the MongoDB pool before initializing the server.
+- Incorporate graceful shutdown lifecycle vectors (`SIGINT`/`SIGTERM`) to cleanly terminate both the HTTP server and the database client.
+- Implement atomic `$unset` mutations inside `confirmEmail` and `resetPassword` fields to resolve token reuse vulnerabilities.
+- Optimize db methods by replacing `.find().toArray()` structures with fast, native `.countDocuments()`.
+- Query pipelines fixed with IUser interfaces.

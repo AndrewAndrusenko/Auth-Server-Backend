@@ -1,22 +1,19 @@
 import { ObjectId } from "mongodb";
-import { catchError, EMPTY, from, of, switchMap, tap, throwError } from "rxjs";
-import { hashUserPassword, verifyUserPassword } from "./auth-hash-module";
+import { catchError, EMPTY, from, of, switchMap, take, throwError } from "rxjs";
 import { jwtSetAll, saveRefreshToStore,deleteRefreshToken, clearCookiesJWTTokens, setCookiesJWT_Tokens } from "./jwt-module";
-import { serialize } from "cookie";
+import { Request, Response } from "express"
+import { basename} from "path"
 import { IUser } from "../types/shared-models";
 import { SERVER_ERRORS } from "../types/errors-model";
-import { mongoDBClient } from "./mongodb-module";
-import { NextFunction, Request, Response } from "express"
 import { loggerPino } from "./logger-module";
-import { basename} from "path"
+import { hashUserPassword, verifyUserPassword } from "./auth-hash-module";
+import { mongoClient } from "../bin/auth-server";
 const localLogger= loggerPino.child({ml:basename(__filename)});
-const mongoClient = new mongoDBClient();
 
-export function logInUser (req:Request, res:Response, next:NextFunction) {
-  localLogger.debug(`mongoClient.isOpened ${mongoClient.isOpened} `)
+export function logInUser (req:Request, res:Response) {
   let userFromUI = req.body as IUser;
-  from(mongoClient.isDBConnected()).pipe( 
-    switchMap(()=>mongoClient.findUser(userFromUI)),
+  mongoClient.findUser(userFromUI).pipe(
+    take(1),
     switchMap(user=>user===null? throwError(()=>new Error('Incorrect userId')) : of(user)),
     switchMap(user=>user?.emailConfirmed===true? of(user) : 
       throwError(()=>{
@@ -37,12 +34,11 @@ export function logInUser (req:Request, res:Response, next:NextFunction) {
     })
   ).subscribe(jwtInfoToken=>{
     res = setCookiesJWT_Tokens(res, jwtInfoToken.jwt, jwtInfoToken.refreshToken )
-    // res.setHeader('Authorization', 'Bearer '+ jwtInfoToken.jwt)
     res.send(jwtInfoToken);
     localLogger.info({fn:'logInUser',msg:'success',user:userFromUI.userId})
   })
 }
-export function logOutUser (req:Request, res:Response, next:NextFunction) {
+export function logOutUser (req:Request, res:Response) {
   res = clearCookiesJWTTokens(res);
   deleteRefreshToken(req,res)  
   .pipe(catchError(err=>{
@@ -54,11 +50,10 @@ export function logOutUser (req:Request, res:Response, next:NextFunction) {
     localLogger.info({fn:'logOutUser',msg:'success',user:req.body.userId})
   })
 }
-export function signUpNewUser (req:Request, res:Response, next:NextFunction) {
+export function signUpNewUser (req:Request, res:Response) {
   let newUser = req.body as IUser;
- return from(mongoClient.isDBConnected())
- .pipe( 
-    switchMap(()=>hashUserPassword(newUser.password)),
+ return hashUserPassword(newUser.password).pipe(
+    take(1),
     switchMap((hashPassword)=>mongoClient.addUser({...newUser,password:hashPassword})),
     catchError(err=>{
       res.status(SERVER_ERRORS.get('INTERNAL_ERROR')!.code).send(err);
@@ -74,10 +69,10 @@ export function getUserData (req:Request, res:Response) {
   let userData = (req as any)?.user||{}
   res.send(userData);
 }
-export function updateUserData (req:Request, res:Response, next:NextFunction) {
+export function updateUserData (req:Request, res:Response) {
   let newUser = req.body as IUser;
-  from(mongoClient.isDBConnected()).pipe( 
-    switchMap(()=>mongoClient.updateUser(newUser)),
+  mongoClient.updateUser(newUser).pipe(
+    take(1),
     catchError(e=>{
       res.status(SERVER_ERRORS.get('INTERNAL_ERROR')!.code).send(e);
       return EMPTY
@@ -87,18 +82,18 @@ export function updateUserData (req:Request, res:Response, next:NextFunction) {
     localLogger.info({fn:'updateUserData',msg:JSON.stringify(newUser),user:newUser.userId})
   })
 }
-export function findAllUserData (req:Request, res:Response, next:NextFunction) {
-  from(mongoClient.isDBConnected()).pipe( 
-    switchMap(()=>mongoClient.findAllUsers()),
+export function findAllUserData (req:Request, res:Response) {
+  mongoClient.findAllUsers().pipe(
+    take(1),
     catchError(e=>{
       res.status(SERVER_ERRORS.get('INTERNAL_ERROR')!.code).send(e);
       return EMPTY
     })
   ).subscribe(data=>res.send(data))
 }
-export function deleteUser (req:Request, res:Response, next:NextFunction) {
-  from(mongoClient.isDBConnected()).pipe( 
-    switchMap(()=>mongoClient.deleteUser(req.body.userId)),
+export function deleteUser (req:Request, res:Response) {
+  mongoClient.deleteUser(req.body.userId).pipe(
+    take(1),
     catchError(e=>{
       res.status(SERVER_ERRORS.get('INTERNAL_ERROR')!.code).send(e);
       return EMPTY
@@ -109,10 +104,10 @@ export function deleteUser (req:Request, res:Response, next:NextFunction) {
   })
 }
 
-export function setResetPasswordToken (req:Request, res:Response, next:NextFunction) {
+export function setResetPasswordToken (req:Request, res:Response) {
   let data = req.body as {email:string,passwordToken:string};
-  from(mongoClient.isDBConnected()).pipe( 
-    switchMap(()=>mongoClient.setResetPasswordToken(data.email,data.passwordToken)),
+  mongoClient.setResetPasswordToken(data.email,data.passwordToken).pipe(
+    take(1),
     catchError(err=>{
       res.status(SERVER_ERRORS.get('INTERNAL_ERROR')!.code).send(err);
       return EMPTY
@@ -122,11 +117,10 @@ export function setResetPasswordToken (req:Request, res:Response, next:NextFunct
     localLogger.info({fn:'setResetPasswordToken',msg:req.body.data?.passwordToken,user:data?.email})
   })
 }
-export function setNewPassword (req:Request, res:Response, next:NextFunction) {
+export function setNewPassword (req:Request, res:Response) {
   let data = req.body as {id:string, token:string, password:string};
-  from(mongoClient.isDBConnected())
-  .pipe( 
-    switchMap(()=>hashUserPassword(data.password)),
+  hashUserPassword(data.password).pipe(
+    take(1),
     switchMap(hashedPassword=>mongoClient.resetPassword(data.id,data.token, hashedPassword)),
     catchError(err=>{
       res.status(SERVER_ERRORS.get('INTERNAL_ERROR')!.code).send(err);
@@ -137,9 +131,9 @@ export function setNewPassword (req:Request, res:Response, next:NextFunction) {
     localLogger.info({fn:'setNewPassword',msg: data? 'success':`failed for token ${req.body.token}`,user:req.body.id})
   })
 }
-export function confirmEmailAddress (req:Request, res:Response, next:NextFunction) {
-  from(mongoClient.isDBConnected()).pipe( 
-    switchMap(()=>mongoClient.confirmEmail(req.body)),
+export function confirmEmailAddress (req:Request, res:Response) {
+  mongoClient.confirmEmail(req.body).pipe(
+    take(1),
     switchMap(updateResult=>of(updateResult.modifiedCount!==0||updateResult.matchedCount!==0)),
     catchError(err=>{
       res.status(SERVER_ERRORS.get('INTERNAL_ERROR')!.code).send(err);
@@ -152,9 +146,9 @@ export function confirmEmailAddress (req:Request, res:Response, next:NextFunctio
   })
 }
 //VALIDATORS
-export function checkEmailUnique (req:Request, res:Response, next:NextFunction) {
-  from(mongoClient.isDBConnected()).pipe( 
-    switchMap(()=>mongoClient.checkEmailUnique((req.query as {email:string}).email)),
+export function checkEmailUnique (req:Request, res:Response) {
+  mongoClient.checkEmailUnique((req.query as {email:string}).email).pipe(
+    take(1),
     catchError(err=>{
       res.status(SERVER_ERRORS.get('INTERNAL_ERROR')!.code).send(err);
       localLogger.error({fn:'checkEmailUnique',msg:err.message,user:(req.query as {userId:string}).userId});
@@ -162,17 +156,13 @@ export function checkEmailUnique (req:Request, res:Response, next:NextFunction) 
     })
   ).subscribe(data=>res.send(data))
 }
-export function checkUserIdUnique (req:Request, res:Response, next:NextFunction) {
-  from(mongoClient.isDBConnected()).pipe( 
-    switchMap(()=>mongoClient.checkUserIdUnique((req.query as {userId:string}).userId)),
+export function checkUserIdUnique (req:Request, res:Response) {
+  mongoClient.checkUserIdUnique((req.query as {userId:string}).userId).pipe(
+    take(1),
     catchError(err=>{
       res.status(SERVER_ERRORS.get('INTERNAL_ERROR')!.code).send(err);
       localLogger.error({fn:'checkUserIdUnique',msg:err.message,user:(req.query as {userId:string}).userId});
       return EMPTY
     })
   ).subscribe(data=>res.send(data))
-}
-//UTILS
-export function mongoClientClose (req:Request, res:Response, next:NextFunction) {
-  from(mongoClient.close()).subscribe(()=>res.send('MongoDB connection is closed'))
 }

@@ -9,7 +9,8 @@ export interface IUser {
   password:string,
   email:string,
   emailConfirmed?:boolean
-  role:TAcRole
+  role:TAcRole,
+  passwordToken:string
 }
 export interface IJWTInfo {
   _id:ObjectId,
