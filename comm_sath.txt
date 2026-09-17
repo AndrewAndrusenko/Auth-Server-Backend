@@ -61,3 +61,5 @@ refactor(server): architecture optimization for reactive singletons db and secur
 - Implement atomic `$unset` mutations inside `confirmEmail` and `resetPassword` fields to resolve token reuse vulnerabilities.
 - Optimize db methods by replacing `.find().toArray()` structures with fast, native `.countDocuments()`.
 - Query pipelines fixed with IUser interfaces.
+
+style: format codebase using prettier
