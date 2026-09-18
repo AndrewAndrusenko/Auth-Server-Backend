@@ -1,12 +1,6 @@
 import { ObjectId } from "mongodb";
 import { catchError, EMPTY, of, switchMap, take, throwError } from "rxjs";
-import {
-  jwtSetAll,
-  saveRefreshToStore,
-  deleteRefreshToken,
-  clearCookiesJWTTokens,
-  setCookiesJWT_Tokens,
-} from "./jwt-module";
+import { jwtSetAll,  saveRefreshToStore, deleteRefreshToken, clearCookiesJWTTokens, setCookiesJWT_Tokens } from "./jwt-module";
 import { Request, Response } from "express";
 import { basename } from "path";
 import { IUser } from "../types/shared-models";
@@ -22,11 +16,7 @@ export function logInUser(req: Request, res: Response) {
     .findUser(userFromUI)
     .pipe(
       take(1),
-      switchMap((user) =>
-        user === null
-          ? throwError(() => new Error("Incorrect userId"))
-          : of(user),
-      ),
+      switchMap((user) => user === null? throwError(() => new Error("Incorrect userId")) : of(user)),
       switchMap((user) =>
         user?.emailConfirmed === true
           ? of(user)
@@ -38,11 +28,7 @@ export function logInUser(req: Request, res: Response) {
             }),
       ),
       switchMap((user) => verifyUserPassword(userFromUI.password, user)),
-      switchMap((userPassword) =>
-        userPassword.passwordConfirmed
-          ? of(userPassword.userData)
-          : throwError(() => new Error("Incorrect password")),
-      ),
+      switchMap((userPassword) =>userPassword.passwordConfirmed? of(userPassword.userData): throwError(() => new Error("Incorrect password"))),
       switchMap((user) =>
         jwtSetAll({
           _id: user._id as ObjectId,
@@ -50,41 +36,17 @@ export function logInUser(req: Request, res: Response) {
           role: user.role,
         }),
       ),
-      switchMap((jwtInfoToken) =>
-        saveRefreshToStore({
-          ...jwtInfoToken,
-          timeSaved: new Date().toLocaleString(),
-        }),
-      ),
+      switchMap((jwtInfoToken) =>  saveRefreshToStore({ ...jwtInfoToken,  timeSaved: new Date().toLocaleString()})),
       catchError((e) => {
-        localLogger.error({
-          fn: "logInUser",
-          user: userFromUI.userId,
-          msg: (e as Error).message,
-          err_name: (e as Error).name,
-        });
-        res.send({
-          errorResponse: {
-            message: (e as Error).message,
-            name: (e as Error).name,
-            stack: (e as Error)?.stack,
-          },
-        });
+        localLogger.error({fn: "logInUser", user: userFromUI.userId, msg: (e as Error).message, err_name: (e as Error).name});
+        res.send({errorResponse: {message: (e as Error).message, name: (e as Error).name, stack: (e as Error)?.stack}});
         return EMPTY;
       }),
     )
     .subscribe((jwtInfoToken) => {
-      res = setCookiesJWT_Tokens(
-        res,
-        jwtInfoToken.jwt,
-        jwtInfoToken.refreshToken,
-      );
+      res = setCookiesJWT_Tokens(res, jwtInfoToken.jwt, jwtInfoToken.refreshToken);
       res.send(jwtInfoToken);
-      localLogger.info({
-        fn: "logInUser",
-        msg: "success",
-        user: userFromUI.userId,
-      });
+      localLogger.info({fn: "logInUser", msg: "success",  user: userFromUI.userId});
     });
 }
 export function logOutUser(req: Request, res: Response) {
@@ -110,9 +72,7 @@ export function signUpNewUser(req: Request, res: Response) {
   return hashUserPassword(newUser.password)
     .pipe(
       take(1),
-      switchMap((hashPassword) =>
-        mongoClient.addUser({ ...newUser, password: hashPassword }),
-      ),
+      switchMap((hashPassword) => mongoClient.addUser({ ...newUser, password: hashPassword })),
       catchError((err) => {
         res.status(SERVER_ERRORS.get("INTERNAL_ERROR")!.code).send(err);
         localLogger.error({ fn: "signUpNewUser", msg: err.message });
@@ -121,11 +81,7 @@ export function signUpNewUser(req: Request, res: Response) {
     )
     .subscribe((data) => {
       res.send(data);
-      localLogger.info({
-        fn: "signUpNewUser",
-        msg: "success",
-        user: newUser.userId,
-      });
+      localLogger.info({fn: "signUpNewUser", msg: "success", user: newUser.userId});
     });
 }
 export function getUserData(req: Request, res: Response) {
@@ -145,11 +101,7 @@ export function updateUserData(req: Request, res: Response) {
     )
     .subscribe((data) => {
       res.send(data);
-      localLogger.info({
-        fn: "updateUserData",
-        msg: JSON.stringify(newUser),
-        user: newUser.userId,
-      });
+      localLogger.info({fn: "updateUserData", msg: JSON.stringify(newUser), user: newUser.userId});
     });
 }
 export function findAllUserData(req: Request, res: Response) {
@@ -164,6 +116,7 @@ export function findAllUserData(req: Request, res: Response) {
     )
     .subscribe((data) => res.send(data));
 }
+
 export function deleteUser(req: Request, res: Response) {
   mongoClient
     .deleteUser(req.body.userId)
@@ -176,11 +129,7 @@ export function deleteUser(req: Request, res: Response) {
     )
     .subscribe((data) => {
       res.send(data);
-      localLogger.info({
-        fn: "deleteUser",
-        msg: data?.deletedCount ? "success" : "fail",
-        user: req.body.userId,
-      });
+      localLogger.info({ fn: "deleteUser",  msg: data?.deletedCount ? "success" : "fail", user: req.body.userId});
     });
 }
 
@@ -197,21 +146,16 @@ export function setResetPasswordToken(req: Request, res: Response) {
     )
     .subscribe((data) => {
       res.send(data);
-      localLogger.info({
-        fn: "setResetPasswordToken",
-        msg: req.body.data?.passwordToken,
-        user: data?.email,
-      });
+      localLogger.info({ fn: "setResetPasswordToken", msg: req.body.data?.passwordToken, user: data?.email});
     });
 }
+
 export function setNewPassword(req: Request, res: Response) {
   let data = req.body as { id: string; token: string; password: string };
   hashUserPassword(data.password)
     .pipe(
       take(1),
-      switchMap((hashedPassword) =>
-        mongoClient.resetPassword(data.id, data.token, hashedPassword),
-      ),
+      switchMap((hashedPassword) =>mongoClient.resetPassword(data.id, data.token, hashedPassword)),
       catchError((err) => {
         res.status(SERVER_ERRORS.get("INTERNAL_ERROR")!.code).send(err);
         return EMPTY;
@@ -231,26 +175,16 @@ export function confirmEmailAddress(req: Request, res: Response) {
     .confirmEmail(req.body)
     .pipe(
       take(1),
-      switchMap((updateResult) =>
-        of(updateResult.modifiedCount !== 0 || updateResult.matchedCount !== 0),
-      ),
+      switchMap((updateResult) => of(updateResult.modifiedCount !== 0 || updateResult.matchedCount !== 0)),
       catchError((err) => {
         res.status(SERVER_ERRORS.get("INTERNAL_ERROR")!.code).send(err);
-        localLogger.error({
-          fn: "confirmEmailAddress",
-          user: req.url,
-          msg: err.message,
-        });
+        localLogger.error({fn: "confirmEmailAddress", user: req.url, msg: err.message});
         return EMPTY;
       }),
     )
     .subscribe((data) => {
       res.send(data);
-      localLogger.info({
-        fn: "confirmEmailAddress",
-        msg: data ? "success" : "fail",
-        user: req.body.id || "0",
-      });
+      localLogger.info({fn: "confirmEmailAddress", msg: data ? "success" : "fail", user: req.body.id || "0"});
     });
 }
 //VALIDATORS
@@ -261,11 +195,7 @@ export function checkEmailUnique(req: Request, res: Response) {
       take(1),
       catchError((err) => {
         res.status(SERVER_ERRORS.get("INTERNAL_ERROR")!.code).send(err);
-        localLogger.error({
-          fn: "checkEmailUnique",
-          msg: err.message,
-          user: (req.query as { userId: string }).userId,
-        });
+        localLogger.error({fn: "checkEmailUnique", msg: err.message, user: (req.query as { userId: string }).userId});
         return EMPTY;
       }),
     )
@@ -278,11 +208,7 @@ export function checkUserIdUnique(req: Request, res: Response) {
       take(1),
       catchError((err) => {
         res.status(SERVER_ERRORS.get("INTERNAL_ERROR")!.code).send(err);
-        localLogger.error({
-          fn: "checkUserIdUnique",
-          msg: err.message,
-          user: (req.query as { userId: string }).userId,
-        });
+        localLogger.error({fn: "checkUserIdUnique", msg: err.message, user: (req.query as { userId: string }).userId});
         return EMPTY;
       }),
     )
